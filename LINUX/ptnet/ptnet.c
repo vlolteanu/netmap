@@ -41,6 +41,7 @@ extern int ptnet_vnet_hdr;
 static bool ptnet_gso = true;
 module_param(ptnet_gso, bool, 0444);
 
+
 /* Enable to debug RX-side hangs */
 //#define HANGCTRL
 
@@ -322,7 +323,9 @@ ptnet_start_xmit(struct sk_buff *skb, struct net_device *netdev)
         /* Ask for a kick from a guest to the host if needed. */
 	if (NM_ACCESS_ONCE(ptring->host_need_kick)) {
 		ptring->sync_flags = NAF_FORCE_RECLAIM;
+		ptnet_m_trace(PTNET_M_GUEST_PRE_TX_NTFY);
 		iowrite32(0, pq->kick);
+		ptnet_m_trace(PTNET_M_GUEST_POST_TX_NTFY);
 	}
 
         /* No more TX slots for further transmissions. We have to stop the
@@ -392,6 +395,8 @@ ptnet_tx_intr(int irq, void *data)
 	/* Just wake up the qdisc layer, it will flush pending transmissions,
 	 * with the side effect of reclaiming completed TX slots. */
 	netif_wake_subqueue(netdev, pq->kring_id);
+
+	ptnet_m_trace(PTNET_M_GUEST_START_TX_PROC);
 
 	return IRQ_HANDLED;
 }
@@ -497,6 +502,8 @@ ptnet_rx_poll(struct napi_struct *napi, int budget)
 	ptnet_sync_tail(ptring, kring);
 
 	kring->nr_kflags &= ~NKR_PENDINTR;
+
+	ptnet_m_trace(PTNET_M_GUEST_START_RX_PROC);
 
 	/* Import completed RX slots. */
 	while (work_done < budget && head != ring->tail) {
@@ -724,7 +731,9 @@ out_of_slots:
 		/* Kick the host if needed. */
 		if (NM_ACCESS_ONCE(ptring->host_need_kick)) {
 			ptring->sync_flags = NAF_FORCE_READ;
+			ptnet_m_trace(PTNET_M_GUEST_PRE_RX_NTFY);
 			iowrite32(0, pq->kick);
+			ptnet_m_trace(PTNET_M_GUEST_POST_RX_NTFY);
 		}
 	}
 
@@ -1153,6 +1162,7 @@ ptnet_nm_register(struct netmap_adapter *na, int onoff)
 
 		if (pi->ptna->backend_regifs == 0) {
 			ret = ptnet_nm_ptctl(netdev, PTNETMAP_PTCTL_UNREGIF);
+			ptnet_m_dump();
 		}
 	}
 
@@ -1189,7 +1199,9 @@ ptnet_nm_txsync(struct netmap_kring *kring, int flags)
 
 	notify = netmap_pt_guest_txsync(pq->ptring, kring, flags);
 	if (notify) {
+		ptnet_m_trace(PTNET_M_GUEST_PRE_TX_NTFY);
 		iowrite32(0, pq->kick);
+		ptnet_m_trace(PTNET_M_GUEST_POST_TX_NTFY);
 	}
 
 	return 0;
@@ -1204,7 +1216,9 @@ ptnet_nm_rxsync(struct netmap_kring *kring, int flags)
 
 	notify = netmap_pt_guest_rxsync(pq->ptring, kring, flags);
 	if (notify) {
+		ptnet_m_trace(PTNET_M_GUEST_PRE_RX_NTFY);
 		iowrite32(0, pq->kick);
+		ptnet_m_trace(PTNET_M_GUEST_POST_RX_NTFY);
 	}
 
 	return 0;

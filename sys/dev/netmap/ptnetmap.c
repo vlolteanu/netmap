@@ -73,6 +73,9 @@
 #define DBG(x)
 #endif
 
+struct ptnet_m_event m_events[PTNET_M_MAX];
+int m_cnt = 0;
+int m_overflow = 0;
 
 #undef RATE
 //#define RATE  /* Enables communication statistics. */
@@ -286,6 +289,7 @@ ptnetmap_tx_handler(void *data)
     /* Copy the guest kring pointers from the CSB */
     ptnetmap_host_read_kring_csb(ptring, &g_ring, num_slots);
 
+    ptnet_m_trace(PTNET_M_HOST_START_TX_PROC);
     for (;;) {
 	/* If guest moves ahead too fast, let's cut the move so
 	 * that we don't exceed our batch limit. */
@@ -358,7 +362,9 @@ ptnetmap_tx_handler(void *data)
         if (more_txspace && ptring_intr_enabled(ptring)) {
             /* Disable guest kick to avoid sending unnecessary kicks */
             ptring_intr_enable(ptring, 0);
+	    ptnet_m_trace(PTNET_M_HOST_PRE_TX_NTFY);
             nm_os_kthread_send_irq(kth);
+	    ptnet_m_trace(PTNET_M_HOST_POST_TX_NTFY);
             IFRATE(ptns->rate_ctx.new.htxk++);
             more_txspace = false;
         }
@@ -403,7 +409,9 @@ ptnetmap_tx_handler(void *data)
 
     if (more_txspace && ptring_intr_enabled(ptring)) {
         ptring_intr_enable(ptring, 0);
+	ptnet_m_trace(PTNET_M_HOST_PRE_TX_NTFY);
         nm_os_kthread_send_irq(kth);
+	ptnet_m_trace(PTNET_M_HOST_POST_TX_NTFY);
         IFRATE(ptns->rate_ctx.new.htxk++);
     }
 }
@@ -469,6 +477,7 @@ ptnetmap_rx_handler(void *data)
     /* Copy the guest kring pointers from the CSB */
     ptnetmap_host_read_kring_csb(ptring, &g_ring, num_slots);
 
+    ptnet_m_trace(PTNET_M_HOST_START_RX_PROC);
     for (;;) {
 	uint32_t hwtail;
 
@@ -521,7 +530,9 @@ ptnetmap_rx_handler(void *data)
         if (some_recvd && ptring_intr_enabled(ptring)) {
             /* Disable guest kick to avoid sending unnecessary kicks */
             ptring_intr_enable(ptring, 0);
+	    ptnet_m_trace(PTNET_M_HOST_PRE_RX_NTFY);
             nm_os_kthread_send_irq(kth);
+	    ptnet_m_trace(PTNET_M_HOST_POST_RX_NTFY);
             IFRATE(ptns->rate_ctx.new.hrxk++);
             some_recvd = false;
         }
@@ -570,7 +581,9 @@ ptnetmap_rx_handler(void *data)
     /* Interrupt the guest if needed. */
     if (some_recvd && ptring_intr_enabled(ptring)) {
         ptring_intr_enable(ptring, 0);
+	ptnet_m_trace(PTNET_M_HOST_PRE_RX_NTFY);
         nm_os_kthread_send_irq(kth);
+	ptnet_m_trace(PTNET_M_HOST_POST_RX_NTFY);
         IFRATE(ptns->rate_ctx.new.hrxk++);
     }
 }
@@ -733,6 +746,7 @@ ptnetmap_stop_kthreads(struct netmap_pt_host_adapter *pth_na)
 	for (k = 0; k < num_rings; k++) {
 		nm_os_kthread_stop(ptns->kthreads[k]);
 	}
+	ptnet_m_dump();
 }
 
 static struct ptnetmap_cfg *
@@ -1285,6 +1299,8 @@ netmap_pt_guest_txsync(struct ptnet_ring *ptring, struct netmap_kring *kring,
 {
 	bool notify = false;
 
+	ptnet_m_trace(PTNET_M_GUEST_START_TX_PROC);
+
 	/* Disable notifications */
 	ptring->guest_need_kick = 0;
 
@@ -1349,6 +1365,8 @@ netmap_pt_guest_rxsync(struct ptnet_ring *ptring, struct netmap_kring *kring,
 		       int flags)
 {
 	bool notify = false;
+
+	ptnet_m_trace(PTNET_M_GUEST_START_RX_PROC);
 
         /* Disable notifications */
 	ptring->guest_need_kick = 0;

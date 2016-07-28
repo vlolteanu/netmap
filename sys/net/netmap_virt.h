@@ -466,4 +466,59 @@ int nm_os_pt_memdev_iomap(struct ptnetmap_memdev *, vm_paddr_t *, void **);
 void nm_os_pt_memdev_iounmap(struct ptnetmap_memdev *);
 #endif /* WITH_PTNETMAP_GUEST */
 
+/* Event types. */
+enum {
+    PTNET_M_GUEST_PRE_TX_NTFY  = 1,
+    PTNET_M_GUEST_POST_TX_NTFY, /* 2 */
+    PTNET_M_GUEST_PRE_RX_NTFY,  /* 3 */
+    PTNET_M_GUEST_POST_RX_NTFY, /* 4 */
+    PTNET_M_HOST_PRE_TX_NTFY,   /* 5 */
+    PTNET_M_HOST_POST_TX_NTFY,  /* 6 */
+    PTNET_M_HOST_PRE_RX_NTFY,   /* 7 */
+    PTNET_M_HOST_POST_RX_NTFY,  /* 8 */
+    PTNET_M_GUEST_START_TX_PROC,/* 9 */
+    PTNET_M_GUEST_START_RX_PROC,/* a */
+    PTNET_M_HOST_START_TX_PROC, /* b */
+    PTNET_M_HOST_START_RX_PROC, /* c */
+};
+
+struct ptnet_m_event {
+    uint64_t    e_timestamp;
+    uint8_t     e_type;
+};
+
+#define PTNET_M_MAX		1000000
+
+extern struct ptnet_m_event m_events[PTNET_M_MAX];
+extern int m_cnt;
+extern int m_overflow;
+
+static inline void
+ptnet_m_trace(uint8_t e_type)
+{
+	m_events[m_cnt].e_type = e_type;
+	m_events[m_cnt++].e_timestamp = rdtsc();
+	if (unlikely(m_cnt == PTNET_M_MAX)) {
+		m_cnt = 0;
+		m_overflow = 1;
+	}
+}
+
+static inline void
+ptnet_m_dump(void)
+{
+	int i = m_overflow ? m_cnt : 0;
+
+	D("DUMPSTART");
+	do {
+		printk("%x %llx\n", m_events[i].e_type, m_events[i].e_timestamp);
+		if (++i == PTNET_M_MAX) {
+			i = 0;
+		}
+	} while (i != m_cnt);
+
+	m_overflow = m_cnt = 0;
+	D("DUMPEND");
+}
+
 #endif /* NETMAP_VIRT_H */
