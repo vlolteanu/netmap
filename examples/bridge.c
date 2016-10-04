@@ -19,7 +19,8 @@ int verbose = 0;
 static int do_abort = 0;
 static int zerocopy = 1; /* enable zerocopy if possible */
 
-static long long extra_cost = 0ll;
+static long long extra_cost_flat = 0ll;
+static long long extra_cost_per_byte = 0ll;
 
 static void
 sigint_h(int sig)
@@ -77,7 +78,7 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 		struct netmap_slot *ts = &txring->slot[k];
 		long long i;
 		
-		for (i = 0; i < extra_cost; i++)
+		for (i = 0; i < extra_cost_flat + rs->len * extra_cost_per_byte; i++)
 			asm("");
 
 		/* swap packets */
@@ -149,7 +150,7 @@ static void
 usage(void)
 {
 	fprintf(stderr,
-	    "usage: bridge [-v] [-i ifa] [-i ifb] [-b burst] [-w wait_time] [-q cost] [ifa [ifb [burst]]]\n");
+	    "usage: bridge [-v] [-i ifa] [-i ifb] [-b burst] [-w wait_time] [-q flat cost] [-a cost_per_byte] [ifa [ifb [burst]]]\n");
 	exit(1);
 }
 
@@ -173,7 +174,7 @@ main(int argc, char **argv)
 	fprintf(stderr, "%s built %s %s\n",
 		argv[0], __DATE__, __TIME__);
 
-	while ( (ch = getopt(argc, argv, "b:ci:vw:q:")) != -1) {
+	while ( (ch = getopt(argc, argv, "b:ci:vw:q:a:")) != -1) {
 		switch (ch) {
 		default:
 			D("bad option %c %s", ch, optarg);
@@ -201,7 +202,10 @@ main(int argc, char **argv)
 			wait_link = atoi(optarg);
 			break;
 		case 'q':
-			extra_cost = strtoll(optarg, NULL, 0);
+			extra_cost_flat = strtoll(optarg, NULL, 0);
+			break;
+		case 'a':
+			extra_cost_per_byte = strtoll(optarg, NULL, 0);
 			break;
 		}
 
