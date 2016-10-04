@@ -78,7 +78,7 @@ process_rings(struct netmap_ring *rxring, struct netmap_ring *txring,
 		struct netmap_slot *ts = &txring->slot[k];
 		long long i;
 		
-		for (i = 0; i < extra_cost_flat + rs->len * extra_cost_per_byte; i++)
+		for (i = 0; i < extra_cost_flat + extra_cost_per_byte * rs->len; i++)
 			asm("");
 
 		/* swap packets */
